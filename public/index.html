@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EB2/EB3 Status Tracker</title>
+<style>
+  :root {
+    --bg: #fafafa; --card: #ffffff; --card2: #f5f5f5; --border: #e5e7eb;
+    --text: #1f2937; --muted: #6b7280;
+    --accent: #2563eb; --accent2: #1d4ed8;
+    --green: #16a34a; --red: #dc2626; --amber: #b45309;
+    --eb1: #7c3aed; --eb2: #2563eb; --eb3: #16a34a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    background: var(--bg);
+    color: var(--text); padding: 32px 24px; max-width: 1100px; margin: 0 auto;
+    min-height: 100vh;
+  }
+  h1 { font-size: 1.35rem; font-weight: 700; margin-bottom: 4px; }
+  .sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 20px; }
+
+  .welcome { display: none; align-items: center; gap: 10px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 0.88rem; }
+  .welcome .mono { font-size: 0.88rem; }
+  .welcome button { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 6px 12px; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
+  .welcome button:hover { background: var(--accent2); }
+  .welcome .forget { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 0.8rem; text-decoration: underline; margin-left: auto; }
+
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 18px; margin-bottom: 16px; }
+
+  /* Stats + visual */
+  .stats { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; font-size: 0.82rem; color: var(--muted); }
+  .stat b { font-size: 1.15rem; display: block; color: var(--text); }
+  .viz-title { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 12px; font-weight: 700; }
+  .viz-note { text-transform: none; letter-spacing: 0; font-weight: 400; opacity: .8; }
+  .chart-scroll { overflow-x: auto; }
+  .chart-box { height: 280px; min-width: 620px; }
+  @media (max-width: 720px) { .chart-box { height: 240px; min-width: 560px; } }
+  .filters-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; align-items: end; }
+  .clear-btn { background: var(--card); color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; font-size: 0.85rem; cursor: pointer; width: 100%; }
+  .clear-btn:hover { color: var(--text); border-color: #9ca3af; }
+
+  /* Collapsible form panel */
+  .panel-toggle {
+    width: 100%; display: flex; align-items: center; justify-content: space-between;
+    background: var(--accent); color: #fff;
+    border: none; border-radius: 8px; padding: 13px 18px; font-size: 0.95rem; font-weight: 700;
+    cursor: pointer; margin-bottom: 16px;
+  }
+  .panel-toggle:hover { background: var(--accent2); }
+  .panel-toggle .chev { transition: transform .25s; font-size: 0.8rem; }
+  .panel-toggle.open .chev { transform: rotate(180deg); }
+  #formPanel { display: none; }
+  #formPanel.open { display: block; }
+
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+  .tabs button { background: var(--card); color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 8px 16px; cursor: pointer; font-size: 0.9rem; }
+  .tabs button.active { background: #eff6ff; color: var(--accent); border-color: #93c5fd; }
+  form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  label { font-size: 0.72rem; color: var(--muted); display: block; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+  input, select, textarea { width: 100%; min-width: 0; background: #fff; border: 1px solid #d1d5db; border-radius: 6px; color: var(--text); padding: 9px 10px; font-size: 0.9rem; color-scheme: light; }
+  input[type="date"] { -webkit-appearance: none; appearance: none; min-height: 39px; }
+  .f-item, form > div { min-width: 0; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+  textarea { grid-column: 1 / -1; min-height: 60px; resize: vertical; }
+  .full { grid-column: 1 / -1; }
+  .section-title { grid-column: 1 / -1; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); border-top: 1px solid var(--border); padding-top: 14px; margin-top: 2px; }
+  .field-hint { font-size: 0.72rem; color: var(--muted); margin-top: 4px; }
+  button.submit { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 11px 22px; font-size: 0.95rem; cursor: pointer; font-weight: 700; min-width: 140px; }
+  button.submit:hover:not(:disabled) { background: var(--accent2); }
+  button.submit:disabled { opacity: 0.6; cursor: wait; }
+
+  /* Toasts */
+  #toasts { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; flex-direction: column; gap: 8px; width: min(92vw, 480px); }
+  .toast { padding: 12px 16px; border-radius: 8px; font-size: 0.9rem; box-shadow: 0 8px 24px rgba(31,41,55,.12); animation: slideDown .25s ease; }
+  .toast.ok { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+  .toast.err { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+  .toast.info { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+  @keyframes slideDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+  .toast.out { opacity: 0; transition: opacity .3s; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  thead th { position: sticky; top: 0; background: var(--card); z-index: 2; text-align: left; color: var(--muted); font-weight: 600; padding: 9px 10px; border-bottom: 1px solid var(--border); cursor: pointer; user-select: none; white-space: nowrap; }
+  thead th:hover { color: var(--text); }
+  td { padding: 9px 10px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+  tbody tr:hover td { background: #fafafa; }
+  .edit-btn { background: none; border: none; padding: 3px 6px; font-size: 0.95rem; cursor: pointer; border-radius: 6px; opacity: 0.65; line-height: 1; }
+  .edit-btn:hover { opacity: 1; background: #eff6ff; }
+  tbody tr.flash td { animation: flash 1.6s ease; }
+  @keyframes flash { 0% { background: rgba(37,99,235,.12); } 100% { background: transparent; } }
+
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 0.74rem; font-weight: 700; white-space: nowrap; }
+  .b-not { background: #f3f4f6; color: var(--muted); }
+  .b-open { background: #eff6ff; color: #1d4ed8; }
+  .b-filed { background: #fffbeb; color: #b45309; }
+  .b-rfe { background: #fef2f2; color: #b91c1c; }
+  .b-approved { background: #f0fdf4; color: #15803d; }
+  .b-denied { background: #fef2f2; color: #b91c1c; }
+  .cat { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 0.74rem; font-weight: 700; }
+  .cat-EB1 { background: #f5f3ff; color: #6d28d9; }
+  .cat-EB2 { background: #eff6ff; color: #1d4ed8; }
+  .cat-EB3 { background: #f0fdf4; color: #15803d; }
+  .mono { font-family: ui-monospace, Menlo, monospace; font-size: 0.8rem; color: var(--text); font-weight: 600; }
+  .notes-cell { color: var(--muted); min-width: 200px; max-width: 340px; }
+  .table-wrap { overflow-x: auto; max-height: 65vh; overflow-y: auto; border-radius: 8px; }
+  .result-count { color: var(--muted); font-size: 0.8rem; margin-bottom: 10px; }
+
+  /* Entry cards: mobile-only view of the board */
+  .cards { display: none; }
+  .ecard { border: 1px solid var(--border); border-radius: 8px; padding: 13px 14px; margin-bottom: 10px; background: var(--card); }
+  .ecard.flash { animation: flash 1.6s ease; }
+  .ecard-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .ecard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: 0.82rem; }
+  .ecard-grid .k { color: var(--muted); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .ecard-notes { margin-top: 8px; font-size: 0.82rem; color: var(--muted); }
+
+  @media (max-width: 720px) {
+    body { padding: 20px 12px; }
+    h1 { font-size: 1.2rem; }
+    .card { padding: 14px; }
+    .tabs { flex-direction: column; }
+    .tabs button { width: 100%; padding: 11px; }
+    form { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .stats { gap: 8px; }
+    .stat { padding: 8px 12px; font-size: 0.76rem; }
+    .table-wrap { display: none; }
+    .cards { display: block; }
+    button.submit { width: 100%; }
+  }
+  @media (max-width: 420px) {
+    form { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+  <div id="toasts"></div>
+
+  <h1>EB2/EB3 Status Tracker</h1>
+  <p class="sub">Community tracker. Add your case with a unique ID — use the same ID anytime to update your status.</p>
+
+  <div class="welcome" id="welcome">
+    <span>👋 Welcome back, <span class="mono" id="welcomeId"></span></span>
+    <button onclick="openMyEntry()">Update my entry</button>
+    <button class="forget" onclick="forgetMe()">not you?</button>
+  </div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="card">
+    <div class="filters-grid">
+      <div class="f-item"><label>Category</label><select id="filterCat" onchange="renderTable()"><option value="">All</option></select></div>
+      <div class="f-item"><label>Law Firm</label><select id="filterFirm" onchange="renderTable()"><option value="">All</option></select></div>
+      <div class="f-item"><label>Status</label><select id="filterStatus" onchange="renderTable()"><option value="">All</option></select></div>
+      <div class="f-item"><label>PD from</label><input id="pdFrom" type="date" onchange="renderTable()"></div>
+      <div class="f-item"><label>PD to</label><input id="pdTo" type="date" onchange="renderTable()"></div>
+      <div class="f-item"><label>&nbsp;</label><button class="clear-btn" onclick="clearFilters()">✕ Clear</button></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 class="viz-title">Cases by priority date <span class="viz-note">(stacked by status · respects the filters above · hover or tap a bar for details)</span></h3>
+    <div class="chart-scroll"><div class="chart-box"><canvas id="pdCanvas"></canvas></div></div>
+  </div>
+
+  <button class="panel-toggle" id="panelToggle" onclick="togglePanel()">
+    <span>➕ Add or update my entry</span><span class="chev">▼</span>
+  </button>
+
+  <div class="card" id="formPanel">
+    <div class="tabs">
+      <button id="tabAdd" class="active" onclick="showTab('add')">➕ Add my entry</button>
+      <button id="tabUpdate" onclick="showTab('update')">✏️ Update my entry</button>
+    </div>
+
+    <form id="addForm">
+      <div><label>Your unique ID *</label><input name="id" required maxlength="24" pattern="[A-Za-z0-9][A-Za-z0-9._-]{1,23}" title="2–24 characters: letters, numbers, dash, dot, underscore"><div class="field-hint">2–24 chars: letters, numbers, dash, dot, underscore</div></div>
+      <div><label>Category *</label><select name="category" class="catSel" required></select></div>
+      <div><label>Priority Date *</label><input name="pd" type="date" required></div>
+      <div><label>Law Firm</label><select name="lawFirm" class="firmSel"></select></div>
+      <div><label>Status *</label><select name="status" class="statusSel" required></select></div>
+      <div class="section-title">🗓 Timeline</div>
+      <div><label>Case Open Date</label><input name="caseOpenDate" type="date"></div>
+      <div><label>Case Filed Date</label><input name="caseFiledDate" type="date"></div>
+      <div><label>Final Decision Date</label><input name="decisionDate" type="date"></div>
+      <textarea name="notes" placeholder="Notes (questionnaire received, location change, firm name if Other, etc.)"></textarea>
+      <div class="full"><button class="submit" type="submit">Add entry</button></div>
+    </form>
+
+    <div id="updateFlow" style="display:none">
+      <form id="lookupForm">
+        <div><label>Enter your ID</label><input name="lookupId" required placeholder="your unique ID"></div>
+        <div style="align-self:end"><button class="submit" type="submit">Find my entry</button></div>
+      </form>
+      <form id="updateForm" style="display:none; margin-top:16px">
+        <input type="hidden" name="id">
+        <div><label>Category</label><select name="category" class="catSel"></select></div>
+        <div><label>Priority Date</label><input name="pd" type="date"></div>
+        <div><label>Law Firm</label><select name="lawFirm" class="firmSel"></select></div>
+        <div><label>Status</label><select name="status" class="statusSel"></select></div>
+        <div class="section-title">🗓 Timeline</div>
+        <div><label>Case Open Date</label><input name="caseOpenDate" type="date"></div>
+        <div><label>Case Filed Date</label><input name="caseFiledDate" type="date"></div>
+        <div><label>Final Decision Date</label><input name="decisionDate" type="date"></div>
+        <textarea name="notes"></textarea>
+        <div class="full"><button class="submit" type="submit">Save changes</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="result-count" id="resultCount"></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr id="headRow"></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="cards" id="cards"></div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+let entries = [], meta = { categories: [], statuses: [], lawFirms: [] };
+let sortKey = 'updatedAt', sortDir = -1, flashId = null;
+const COLS = [
+  ['id', 'ID'], ['category', 'Cat'], ['pd', 'Priority Date'], ['lawFirm', 'Law Firm'],
+  ['status', 'Status'], ['caseOpenDate', 'Opened'], ['caseFiledDate', 'Filed'],
+  ['decisionDate', 'Decision'], ['updatedAt', 'Last Updated'], ['notes', 'Notes'],
+];
+const MY_ID_KEY = '***';
+const STATUS_COLORS = {
+  'Case Not Opened': '#9ca3af', 'Case Opened': '#2563eb', 'Case Filed': '#d97706',
+  'RFE': '#dc2626', 'Approved': '#16a34a', 'Denied': '#dc2626',
+};
+const CAT_COLORS = { EB1: '#7c3aed', EB2: '#2563eb', EB3: '#16a34a' };
+
+const badgeClass = (s) => ({
+  'Case Not Opened': 'b-not', 'Case Opened': 'b-open', 'Case Filed': 'b-filed',
+  'RFE': 'b-rfe', 'Approved': 'b-approved', 'Denied': 'b-denied',
+}[s] || 'b-not');
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const dateOnly = (s) => (s || '').slice(0, 10);
+
+function toast(text, cls = 'info', ms = 4000) {
+  const el = document.createElement('div');
+  el.className = 'toast ' + cls;
+  el.textContent = text;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 350); }, ms);
+}
+
+async function api(path, opts) {
+  const res = await fetch(path, opts && { ...opts, headers: { 'Content-Type': 'application/json' } });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+function setBusy(form, busy, label) {
+  const btn = form.querySelector('button.submit');
+  if (busy) { btn.dataset.label = btn.textContent; btn.textContent = label; btn.disabled = true; }
+  else { btn.textContent = btn.dataset.label || btn.textContent; btn.disabled = false; }
+}
+
+/* ---- Remembered ID ---- */
+function myId() { return localStorage.getItem(MY_ID_KEY); }
+function rememberMe(id) { localStorage.setItem(MY_ID_KEY, id); renderWelcome(); }
+function forgetMe() {
+  localStorage.removeItem(MY_ID_KEY);
+  renderWelcome();
+  toast('Forgot your ID on this device.', 'info');
+}
+function renderWelcome() {
+  const w = document.getElementById('welcome');
+  const id = myId();
+  const entry = id && entries.find(e => e.id === id);
+  if (entry) {
+    document.getElementById('welcomeId').textContent = entry.displayId || entry.id;
+    w.style.display = 'flex';
+  } else w.style.display = 'none';
+}
+function openMyEntry() {
+  const id = myId();
+  if (!id) return;
+  openPanel('update');
+  prefill(id);
+}
+
+/* ---- Collapsible panel ---- */
+function togglePanel() {
+  const p = document.getElementById('formPanel');
+  const open = !p.classList.contains('open');
+  p.classList.toggle('open', open);
+  document.getElementById('panelToggle').classList.toggle('open', open);
+  if (open) p.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function openPanel(tab) {
+  if (!document.getElementById('formPanel').classList.contains('open')) togglePanel();
+  if (tab) showTab(tab);
+}
+
+async function load() {
+  [meta, { entries }] = await Promise.all([api('/api/meta'), api('/api/entries')]);
+  for (const sel of document.querySelectorAll('.catSel'))
+    sel.innerHTML = meta.categories.map(c => `<option>${c}</option>`).join('');
+  for (const sel of document.querySelectorAll('.statusSel'))
+    sel.innerHTML = meta.statuses.map(s => `<option>${s}</option>`).join('');
+  for (const sel of document.querySelectorAll('.firmSel'))
+    sel.innerHTML = meta.lawFirms.map(f => `<option>${f}</option>`).join('');
+  document.getElementById('filterCat').innerHTML =
+    '<option value="">All</option>' + meta.categories.map(c => `<option>${c}</option>`).join('');
+  document.getElementById('filterStatus').innerHTML =
+    '<option value="">All</option>' + meta.statuses.map(s => `<option>${s}</option>`).join('');
+  document.getElementById('filterFirm').innerHTML =
+    '<option value="">All</option>' + meta.lawFirms.map(f => `<option>${f}</option>`).join('');
+  loadStats();
+  renderWelcome();
+  renderTable();
+}
+
+async function loadStats() {
+  const s = await api('/api/stats');
+  document.getElementById('stats').innerHTML =
+    `<div class="stat"><b>${s.total}</b>total cases</div>` +
+    meta.statuses.filter(st => s.byStatus[st]).map(st =>
+      `<div class="stat"><b>${s.byStatus[st]}</b>${st}</div>`).join('');
+}
+
+let pdChartInst = null;
+
+function renderPdChart(rows) {
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const buckets = new Map();
+  for (const e of rows) {
+    const [y, m] = e.pd.split('-').map(Number);
+    if (!y || !m) continue;
+    const key = `${y}-${String(m).padStart(2, '0')}`;
+    if (!buckets.has(key)) buckets.set(key, { sort: y * 100 + m, counts: {} });
+    buckets.get(key).counts[e.status] = (buckets.get(key).counts[e.status] || 0) + 1;
+  }
+  const sorted = [...buckets.entries()].sort((a, b) => a[1].sort - b[1].sort);
+  const labels = sorted.map(([k]) => `'${k.slice(2, 4)} ${MONTHS[+k.slice(5) - 1]}`);
+  const totals = sorted.map(([, b]) => Object.values(b.counts).reduce((s, n) => s + n, 0));
+  const present = meta.statuses.filter(st => sorted.some(([, b]) => b.counts[st]));
+  const datasets = present.map(st => ({
+    label: st,
+    data: sorted.map(([, b]) => b.counts[st] || 0),
+    backgroundColor: STATUS_COLORS[st],
+    borderRadius: 2,
+  }));
+
+  if (pdChartInst) pdChartInst.destroy();
+  pdChartInst = new Chart(document.getElementById('pdCanvas'), {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          stacked: true,
+          grid: { display: false },
+          ticks: { autoSkip: false, maxRotation: 90, minRotation: 90, font: { size: 9 } },
+        },
+        y: { stacked: true, beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#f3f4f6' } },
+      },
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            title: (items) => {
+              const t = totals[items[0].dataIndex];
+              return `${items[0].label} — ${t} case${t > 1 ? 's' : ''}`;
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+function filteredEntries() {
+  const fc = document.getElementById('filterCat').value;
+  const ff = document.getElementById('filterFirm').value;
+  const fs = document.getElementById('filterStatus').value;
+  const from = document.getElementById('pdFrom').value;
+  const to = document.getElementById('pdTo').value;
+  return entries
+    .filter(e =>
+      (!fc || e.category === fc) &&
+      (!ff || e.lawFirm === ff) &&
+      (!fs || e.status === fs) &&
+      (!from || e.pd >= from) &&
+      (!to || e.pd <= to))
+    .sort((a, b) => String(a[sortKey] ?? '').localeCompare(String(b[sortKey] ?? '')) * sortDir);
+}
+
+function clearFilters() {
+  for (const id of ['filterCat', 'filterFirm', 'filterStatus', 'pdFrom', 'pdTo'])
+    document.getElementById(id).value = '';
+  renderTable();
+}
+
+function renderTable() {
+  const rows = filteredEntries();
+  renderPdChart(rows);
+  document.getElementById('resultCount').textContent =
+    `Showing ${rows.length} of ${entries.length} entries`;
+
+  document.getElementById('headRow').innerHTML = COLS.map(([k, label]) =>
+    `<th onclick="sortBy('${k}')">${label}${sortKey === k ? (sortDir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('') + '<th style="cursor:default"></th>';
+
+  document.getElementById('tbody').innerHTML = rows.map(e => `<tr${e.id === flashId ? ' class="flash"' : ''}>
+    <td><span class="mono">${esc(e.displayId || e.id)}</span></td>
+    <td><span class="cat cat-${esc(e.category)}">${esc(e.category)}</span></td>
+    <td style="white-space:nowrap">${esc(e.pd)}</td>
+    <td>${esc(e.lawFirm)}</td>
+    <td><span class="badge ${badgeClass(e.status)}">${esc(e.status)}</span></td>
+    <td style="white-space:nowrap">${esc(e.caseOpenDate)}</td>
+    <td style="white-space:nowrap">${esc(e.caseFiledDate)}</td>
+    <td style="white-space:nowrap">${esc(e.decisionDate)}</td>
+    <td style="color:var(--muted);white-space:nowrap">${esc(dateOnly(e.updatedAt)) || '—'}</td>
+    <td class="notes-cell">${esc(e.notes)}</td>
+    <td><button class="edit-btn" title="Edit this record" onclick="prefill('${esc(e.id)}')">✏️</button></td>
+  </tr>`).join('') || '<tr><td colspan="11" style="color:var(--muted)">No matching entries.</td></tr>';
+
+  // Mobile card view
+  document.getElementById('cards').innerHTML = rows.map(e => `
+    <div class="ecard${e.id === flashId ? ' flash' : ''}">
+      <div class="ecard-top">
+        <span class="mono">${esc(e.displayId || e.id)}</span>
+        <span style="display:flex;gap:8px;align-items:center">
+          <span class="badge ${badgeClass(e.status)}">${esc(e.status)}</span>
+          <button class="edit-btn" title="Edit this record" onclick="prefill('${esc(e.id)}')">✏️</button>
+        </span>
+      </div>
+      <div class="ecard-grid">
+        <div><div class="k">Category</div><span class="cat cat-${esc(e.category)}">${esc(e.category)}</span></div>
+        <div><div class="k">Priority Date</div>${esc(e.pd)}</div>
+        <div><div class="k">Law Firm</div>${esc(e.lawFirm) || '—'}</div>
+        <div><div class="k">Opened</div>${esc(e.caseOpenDate) || '—'}</div>
+        <div><div class="k">Filed</div>${esc(e.caseFiledDate) || '—'}</div>
+        <div><div class="k">Decision</div>${esc(e.decisionDate) || '—'}</div>
+        <div><div class="k">Last Updated</div>${esc(dateOnly(e.updatedAt)) || '—'}</div>
+      </div>
+      ${e.notes ? `<div class="ecard-notes">${esc(e.notes)}</div>` : ''}
+    </div>`).join('') || '<div style="color:var(--muted)">No matching entries.</div>';
+
+  flashId = null;
+}
+
+function sortBy(k) {
+  if (sortKey === k) sortDir *= -1; else { sortKey = k; sortDir = 1; }
+  renderTable();
+}
+
+function showTab(t) {
+  document.getElementById('tabAdd').classList.toggle('active', t === 'add');
+  document.getElementById('tabUpdate').classList.toggle('active', t === 'update');
+  document.getElementById('addForm').style.display = t === 'add' ? 'grid' : 'none';
+  document.getElementById('updateFlow').style.display = t === 'update' ? 'block' : 'none';
+  if (t === 'update') document.querySelector('#lookupForm [name=lookupId]').focus();
+}
+
+function prefill(id) {
+  openPanel('update');
+  document.querySelector('#lookupForm [name=lookupId]').value = id;
+  document.getElementById('lookupForm').requestSubmit();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+document.getElementById('addForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  setBusy(f, true, 'Adding…');
+  try {
+    const r = await api('/api/entries', { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(f))) });
+    rememberMe(r.id);
+    flashId = r.id;
+    toast(`✅ Added! Your ID is "${r.id}" — it's saved on this device.`, 'ok', 6000);
+    f.reset();
+    await load();
+    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+  } catch (err) { toast('❌ ' + err.message, 'err', 6000); }
+  setBusy(f, false);
+});
+
+document.getElementById('lookupForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  const id = f.lookupId.value.trim();
+  setBusy(f, true, 'Finding…');
+  try {
+    const entry = await api('/api/entries/' + encodeURIComponent(id));
+    const uf = document.getElementById('updateForm');
+    uf.style.display = 'grid';
+    for (const k of ['id', 'category', 'pd', 'lawFirm', 'status', 'caseOpenDate', 'caseFiledDate', 'decisionDate', 'notes'])
+      uf[k].value = entry[k] ?? '';
+    rememberMe(entry.id);
+    toast(`Loaded "${entry.id}" — edit below and save.`, 'info');
+  } catch (err) {
+    document.getElementById('updateForm').style.display = 'none';
+    toast('❌ ' + err.message, 'err', 6000);
+  }
+  setBusy(f, false);
+});
+
+document.getElementById('updateForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  const body = Object.fromEntries(new FormData(f));
+  const id = body.id; delete body.id;
+  setBusy(f, true, 'Saving…');
+  try {
+    await api('/api/entries/' + encodeURIComponent(id), { method: 'PUT', body: JSON.stringify(body) });
+    rememberMe(id);
+    flashId = id;
+    toast('✅ Saved!', 'ok');
+    await load();
+  } catch (err) { toast('❌ ' + err.message, 'err', 6000); }
+  setBusy(f, false);
+});
+
+load().catch(e => toast('Failed to load: ' + e.message, 'err'));
+</script>
+</body>
+</html>

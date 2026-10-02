@@ -1,0 +1,16 @@
+{
+  "name": "eb-status-tracker",
+  "version": "1.0.0",
+  "description": "EB2/EB3 case status tracker — unique ID per user, self-serve updates",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "seed": "node seed.js",
+    "start": "node server.js",
+    "seed:supabase": "node seed-supabase.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.47.0",
+    "express": "^4.21.2"
+  }
+}
