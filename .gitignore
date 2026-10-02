@@ -2,3 +2,4 @@ node_modules/
 tracker.db
 .env
 .vercel
+supabase/.temp/
