@@ -43,21 +43,31 @@ export function validateEntry(body, { partial = false } = {}) {
   const errors = [];
   const out = {};
 
+  // Real calendar dates only, year 2000..currentYear+1 (rejects 0023, Feb 30, etc.)
+  const MAX_YEAR = new Date().getFullYear() + 1;
+  const isValidDate = (v) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+    const d = new Date(v + 'T00:00:00Z');
+    if (isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== v) return false;
+    const y = +v.slice(0, 4);
+    return y >= 2000 && y <= MAX_YEAR;
+  };
+
   if (!partial || body.category !== undefined) {
     if (!CATEGORIES.includes(body.category)) {
       errors.push(`category must be one of: ${CATEGORIES.join(', ')}`);
     } else out.category = body.category;
   }
   if (!partial || body.pd !== undefined) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(body.pd || '')) {
-      errors.push('pd must be a date YYYY-MM-DD');
+    if (!isValidDate(body.pd || '')) {
+      errors.push(`pd must be a real date YYYY-MM-DD (year 2000–${MAX_YEAR})`);
     } else out.pd = body.pd;
   }
   const optDate = (key) => {
     if (partial && body[key] === undefined) return;
     const v = body[key] || '';
-    if (v !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(v)) {
-      errors.push(`${key} must be YYYY-MM-DD or empty`);
+    if (v !== '' && !isValidDate(v)) {
+      errors.push(`${key} must be a real date YYYY-MM-DD (year 2000–${MAX_YEAR}) or empty`);
     } else out[key] = v;
   };
   optDate('caseOpenDate');

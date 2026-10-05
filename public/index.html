@@ -305,11 +305,11 @@ function openPanel(tab) {
 async function load() {
   [meta, { entries }] = await Promise.all([api('/api/meta'), api('/api/entries')]);
   for (const sel of document.querySelectorAll('.catSel'))
-    sel.innerHTML = meta.categories.map(c => `<option>${c}</option>`).join('');
+    if (!sel.options.length) sel.innerHTML = meta.categories.map(c => `<option>${c}</option>`).join('');
   for (const sel of document.querySelectorAll('.statusSel'))
-    sel.innerHTML = meta.statuses.map(s => `<option>${s}</option>`).join('');
+    if (!sel.options.length) sel.innerHTML = meta.statuses.map(s => `<option>${s}</option>`).join('');
   for (const sel of document.querySelectorAll('.firmSel'))
-    sel.innerHTML = meta.lawFirms.map(f => `<option>${f}</option>`).join('');
+    if (!sel.options.length) sel.innerHTML = meta.lawFirms.map(f => `<option>${f}</option>`).join('');
   document.getElementById('filterCat').innerHTML =
     '<option value="">All</option>' + meta.categories.map(c => `<option>${c}</option>`).join('');
   document.getElementById('filterStatus').innerHTML =
@@ -523,6 +523,10 @@ document.getElementById('updateForm').addEventListener('submit', async (e) => {
   } catch (err) { toast('❌ ' + err.message, 'err', 6000); }
   setBusy(f, false);
 });
+
+// Constrain all date pickers to sane years
+const dateMax = `${new Date().getFullYear() + 1}-12-31`;
+document.querySelectorAll('input[type=date]').forEach(i => { i.min = '2000-01-01'; i.max = dateMax; });
 
 load().catch(e => toast('Failed to load: ' + e.message, 'err'));
 </script>
