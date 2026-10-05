@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  listEntries, getEntry, createEntry, updateEntry, getStats,
+  listEntries, getEntry, createEntry, updateEntry, listHistory, getStats,
   normalizeId, displayIdFrom, validateEntry, CATEGORIES, STATUSES, LAW_FIRMS,
 } from './db.js';
 
@@ -31,6 +31,14 @@ app.get('/api/entries/:id', async (req, res, next) => {
     const entry = await getEntry(id);
     if (!entry) return res.status(404).json({ error: `No entry found for ID "${id}"` });
     res.json(entry);
+  } catch (e) { next(e); }
+});
+
+// Audit trail for one entry (newest first)
+app.get('/api/entries/:id/history', async (req, res, next) => {
+  try {
+    const id = normalizeId(req.params.id);
+    res.json({ entry: id, history: await listHistory(id) });
   } catch (e) { next(e); }
 });
 

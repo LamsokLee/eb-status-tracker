@@ -15,6 +15,7 @@ export const STATUSES = [
 ];
 
 const TABLE = 'eb_entries';
+const HISTORY_TABLE = 'eb_entries_history';
 let client;
 
 export function getDb() {
@@ -137,11 +138,14 @@ export async function createEntry(values) {
     if (error.code === '23505') return 'duplicate';
     throw error;
   }
+  await recordHistory(values.id, 'create', null, await getEntry(values.id));
   return null;
 }
 
 // Returns false if no row matched the ID.
 export async function updateEntry(id, values) {
+  const before = await getEntry(id);
+  if (!before) return false;
   const colMap = {
     category: 'category', pd: 'pd', lawFirm: 'law_firm', status: 'status',
     caseOpenDate: 'case_open_date', caseFiledDate: 'case_filed_date',
@@ -152,9 +156,34 @@ export async function updateEntry(id, values) {
     row[colMap[k]] = k.endsWith('Date') ? (v || null) : v;
   }
   row.updated_at = new Date().toISOString();
-  const { data, error } = await getDb().from(TABLE).update(row).eq('id', id).select('id');
+  const { error } = await getDb().from(TABLE).update(row).eq('id', id).select('id');
   if (error) throw error;
-  return data.length > 0;
+  await recordHistory(id, 'update', before, await getEntry(id));
+  return true;
+}
+
+// Append-only audit trail: one row per create/update with before/after snapshots.
+// Also logged to stdout so it shows up in `vercel logs`.
+async function recordHistory(entryId, action, before, after) {
+  const fields = action === 'create'
+    ? Object.keys(after || {})
+    : Object.keys(after || {}).filter((k) => JSON.stringify(before?.[k]) !== JSON.stringify(after?.[k]));
+  console.log('[audit]', JSON.stringify({
+    entryId, action, fields,
+    category: { from: before?.category ?? null, to: after?.category ?? null },
+  }));
+  const { error } = await getDb().from(HISTORY_TABLE).insert({
+    entry_id: entryId, action, changed_fields: fields, before: before || null, after: after || null,
+  });
+  if (error) console.error('[audit] failed to write history:', error.message);
+}
+
+// Read the audit trail for one entry, newest first.
+export async function listHistory(id, limit = 50) {
+  const { data, error } = await getDb().from(HISTORY_TABLE)
+    .select('*').eq('entry_id', id).order('changed_at', { ascending: false }).limit(limit);
+  if (error) throw error;
+  return data;
 }
 
 export async function getStats() {
