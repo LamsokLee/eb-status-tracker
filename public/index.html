@@ -275,7 +275,9 @@ function latestMilestone(e) {
 }
 
 function timelineTrackHtml(e) {
-  const items = meta.milestones.filter((m) => dateOnly(e[m.key]));
+  const items = meta.milestones
+    .filter((m) => dateOnly(e[m.key]))
+    .sort((a, b) => dateOnly(e[a.key]).localeCompare(dateOnly(e[b.key])));
   return `<div class="milestone-track">${items.map((m, i) => {
     const date = dateOnly(e[m.key]);
     const state = m.key === 'rfeDate' ? 'event' : 'filled';
