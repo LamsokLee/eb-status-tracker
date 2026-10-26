@@ -14,6 +14,19 @@ export const STATUSES = [
   'Denied',
 ];
 
+// Timeline milestones, in process order. key = API field, col = DB column.
+// The frontend builds its timeline inputs/columns from this list via /api/meta.
+export const MILESTONES = [
+  { key: 'caseOpenDate', col: 'case_open_date', label: 'Case Opened' },
+  { key: 'caseFiledDate', col: 'case_filed_date', label: 'Case Filed' },
+  { key: 'receiptDate', col: 'receipt_date', label: 'Receipt Notice' },
+  { key: 'biometricsDate', col: 'biometrics_date', label: 'Biometrics' },
+  { key: 'rfeDate', col: 'rfe_date', label: 'RFE Received' },
+  { key: 'eadApprovedDate', col: 'ead_approved_date', label: 'EAD Approved' },
+  { key: 'apApprovedDate', col: 'ap_approved_date', label: 'AP Approved' },
+  { key: 'decisionDate', col: 'decision_date', label: 'Final Decision' },
+];
+
 const TABLE = 'eb_entries';
 const HISTORY_TABLE = 'eb_entries_history';
 let client;
@@ -71,9 +84,7 @@ export function validateEntry(body, { partial = false } = {}) {
       errors.push(`${key} must be a real date YYYY-MM-DD (year 2000–${MAX_YEAR}) or empty`);
     } else out[key] = v;
   };
-  optDate('caseOpenDate');
-  optDate('caseFiledDate');
-  optDate('decisionDate');
+  for (const m of MILESTONES) optDate(m.key);
 
   if (!partial || body.lawFirm !== undefined) {
     if (!LAW_FIRMS.includes(body.lawFirm)) {
@@ -99,9 +110,7 @@ const toRow = (v) => ({
   pd: v.pd,
   law_firm: v.lawFirm ?? '',
   status: v.status,
-  case_open_date: v.caseOpenDate || null,
-  case_filed_date: v.caseFiledDate || null,
-  decision_date: v.decisionDate || null,
+  ...Object.fromEntries(MILESTONES.map((m) => [m.col, v[m.key] || null])),
   notes: v.notes ?? '',
 });
 
@@ -112,9 +121,7 @@ export const fromRow = (r) => ({
   pd: r.pd,
   lawFirm: r.law_firm,
   status: r.status,
-  caseOpenDate: r.case_open_date || '',
-  caseFiledDate: r.case_filed_date || '',
-  decisionDate: r.decision_date || '',
+  ...Object.fromEntries(MILESTONES.map((m) => [m.key, r[m.col] || ''])),
   notes: r.notes,
   updatedAt: String(r.updated_at || '').replace('T', ' ').slice(0, 19),
 });
@@ -147,9 +154,8 @@ export async function updateEntry(id, values) {
   const before = await getEntry(id);
   if (!before) return false;
   const colMap = {
-    category: 'category', pd: 'pd', lawFirm: 'law_firm', status: 'status',
-    caseOpenDate: 'case_open_date', caseFiledDate: 'case_filed_date',
-    decisionDate: 'decision_date', notes: 'notes',
+    category: 'category', pd: 'pd', lawFirm: 'law_firm', status: 'status', notes: 'notes',
+    ...Object.fromEntries(MILESTONES.map((m) => [m.key, m.col])),
   };
   const row = {};
   for (const [k, v] of Object.entries(values)) {

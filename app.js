@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   listEntries, getEntry, createEntry, updateEntry, listHistory, getStats,
-  normalizeId, displayIdFrom, validateEntry, CATEGORIES, STATUSES, LAW_FIRMS,
+  normalizeId, displayIdFrom, validateEntry, CATEGORIES, STATUSES, LAW_FIRMS, MILESTONES,
 } from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -14,7 +14,10 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Metadata for form dropdowns
 app.get('/api/meta', (_req, res) => {
-  res.json({ categories: CATEGORIES, statuses: STATUSES, lawFirms: LAW_FIRMS });
+  res.json({
+    categories: CATEGORIES, statuses: STATUSES, lawFirms: LAW_FIRMS,
+    milestones: MILESTONES.map(({ key, label }) => ({ key, label })),
+  });
 });
 
 // List all entries, sorted by priority date
