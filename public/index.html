@@ -115,15 +115,14 @@
   .timeline-detail-row:hover td { background: transparent; }
   .timeline-panel { background: #f8fafc; border-left: 3px solid var(--accent); padding: 16px 20px 18px; overflow-x: auto; }
   .timeline-panel-title { color: var(--muted); font-size: 0.74rem; font-weight: 700; margin-bottom: 14px; }
-  .milestone-track { display: flex; align-items: flex-start; min-width: 760px; }
-  .track-item { flex: 0 0 92px; text-align: center; }
+  .milestone-track { display: flex; align-items: flex-start; justify-content: center; min-width: 760px; }
+  .track-item { flex: 0 0 104px; text-align: center; }
   .track-dot { display: block; width: 12px; height: 12px; border: 2px solid #d1d5db; border-radius: 50%; background: #fff; margin: 0 auto 7px; }
   .track-item.filled .track-dot { background: var(--green); border-color: var(--green); }
   .track-item.event .track-dot { background: var(--red); border-color: var(--red); }
   .track-label { display: block; font-size: 0.68rem; white-space: nowrap; }
   .track-date { display: block; color: var(--muted); font-size: 0.66rem; margin-top: 3px; white-space: nowrap; }
-  .track-item.empty .track-label, .track-item.empty .track-date { color: #9ca3af; }
-  .track-connector { flex: 1; min-width: 8px; height: 2px; background: #dbe1e8; margin-top: 5px; }
+  .track-connector { flex: 0 1 76px; min-width: 20px; max-width: 76px; height: 2px; background: #dbe1e8; margin-top: 5px; }
   .table-wrap { overflow-x: auto; max-height: 65vh; overflow-y: auto; border-radius: 8px; }
   .result-count { color: var(--muted); font-size: 0.8rem; margin-bottom: 10px; }
 
@@ -276,10 +275,11 @@ function latestMilestone(e) {
 }
 
 function timelineTrackHtml(e) {
-  return `<div class="milestone-track">${meta.milestones.map((m, i) => {
+  const items = meta.milestones.filter((m) => dateOnly(e[m.key]));
+  return `<div class="milestone-track">${items.map((m, i) => {
     const date = dateOnly(e[m.key]);
-    const state = date ? (m.key === 'rfeDate' ? 'event' : 'filled') : 'empty';
-    return `<div class="track-item ${state}"><span class="track-dot"></span><span class="track-label">${esc(m.label)}</span><span class="track-date">${esc(date) || '—'}</span></div>${i < meta.milestones.length - 1 ? '<span class="track-connector"></span>' : ''}`;
+    const state = m.key === 'rfeDate' ? 'event' : 'filled';
+    return `<div class="track-item ${state}"><span class="track-dot"></span><span class="track-label">${esc(m.label)}</span><span class="track-date">${esc(date)}</span></div>${i < items.length - 1 ? '<span class="track-connector"></span>' : ''}`;
   }).join('')}</div>`;
 }
 
