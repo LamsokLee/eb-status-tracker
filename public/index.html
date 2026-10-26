@@ -105,6 +105,8 @@
   .cat-EB3 { background: #f0fdf4; color: #15803d; }
   .mono { font-family: ui-monospace, Menlo, monospace; font-size: 0.8rem; color: var(--text); font-weight: 600; }
   .notes-cell { color: var(--muted); min-width: 200px; max-width: 340px; }
+  .ms-cell { min-width: 170px; font-size: 0.78rem; line-height: 1.5; white-space: nowrap; }
+  .ms-cell .k { color: var(--muted); }
   .table-wrap { overflow-x: auto; max-height: 65vh; overflow-y: auto; border-radius: 8px; }
   .result-count { color: var(--muted); font-size: 0.8rem; margin-bottom: 10px; }
 
@@ -181,10 +183,7 @@
       <div><label>Priority Date *</label><input name="pd" type="date" required></div>
       <div><label>Law Firm</label><select name="lawFirm" class="firmSel"></select></div>
       <div><label>Status *</label><select name="status" class="statusSel" required></select></div>
-      <div class="section-title">🗓 Timeline</div>
-      <div><label>Case Open Date</label><input name="caseOpenDate" type="date"></div>
-      <div><label>Case Filed Date</label><input name="caseFiledDate" type="date"></div>
-      <div><label>Final Decision Date</label><input name="decisionDate" type="date"></div>
+      <div class="section-title timeline-title">🗓 Timeline <span class="viz-note">(fill in whatever you've reached; leave the rest blank)</span></div>
       <textarea name="notes" placeholder="Notes (questionnaire received, location change, firm name if Other, etc.)"></textarea>
       <div class="full"><button class="submit" type="submit">Add entry</button></div>
     </form>
@@ -200,10 +199,7 @@
         <div><label>Priority Date</label><input name="pd" type="date"></div>
         <div><label>Law Firm</label><select name="lawFirm" class="firmSel"></select></div>
         <div><label>Status</label><select name="status" class="statusSel"></select></div>
-        <div class="section-title">🗓 Timeline</div>
-        <div><label>Case Open Date</label><input name="caseOpenDate" type="date"></div>
-        <div><label>Case Filed Date</label><input name="caseFiledDate" type="date"></div>
-        <div><label>Final Decision Date</label><input name="decisionDate" type="date"></div>
+        <div class="section-title timeline-title">🗓 Timeline <span class="viz-note">(fill in whatever you've reached; leave the rest blank)</span></div>
         <textarea name="notes"></textarea>
         <div class="full"><button class="submit" type="submit">Save changes</button></div>
       </form>
@@ -223,13 +219,17 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script>
-let entries = [], meta = { categories: [], statuses: [], lawFirms: [] };
+let entries = [], meta = { categories: [], statuses: [], lawFirms: [], milestones: [] };
 let sortKey = 'updatedAt', sortDir = -1, flashId = null;
 const COLS = [
   ['id', 'ID'], ['category', 'Cat'], ['pd', 'Priority Date'], ['lawFirm', 'Law Firm'],
   ['status', 'Status'], ['caseOpenDate', 'Opened'], ['caseFiledDate', 'Filed'],
-  ['decisionDate', 'Decision'], ['updatedAt', 'Last Updated'], ['notes', 'Notes'],
+  ['decisionDate', 'Decision'], ['otherMilestones', 'Other Milestones'],
+  ['updatedAt', 'Last Updated'], ['notes', 'Notes'],
 ];
+// Milestones with their own table column; the rest are listed in "Other Milestones".
+const CORE_MILESTONES = ['caseOpenDate', 'caseFiledDate', 'decisionDate'];
+const otherMilestones = (e) => meta.milestones.filter(m => !CORE_MILESTONES.includes(m.key) && e[m.key]);
 const MY_ID_KEY = '***';
 const STATUS_COLORS = {
   'Case Not Opened': '#9ca3af', 'Case Opened': '#2563eb', 'Case Filed': '#d97706',
@@ -304,6 +304,12 @@ function openPanel(tab) {
 
 async function load() {
   [meta, { entries }] = await Promise.all([api('/api/meta'), api('/api/entries')]);
+  for (const title of document.querySelectorAll('.timeline-title')) {
+    if (title.dataset.built) continue;
+    title.dataset.built = '1';
+    title.insertAdjacentHTML('afterend', meta.milestones.map(m =>
+      `<div><label>${esc(m.label)}</label><input name="${esc(m.key)}" type="date" min="2000-01-01" max="${dateMax}"></div>`).join(''));
+  }
   for (const sel of document.querySelectorAll('.catSel'))
     if (!sel.options.length) sel.innerHTML = meta.categories.map(c => `<option>${c}</option>`).join('');
   for (const sel of document.querySelectorAll('.statusSel'))
@@ -382,6 +388,11 @@ function renderPdChart(rows) {
   });
 }
 
+function sortValue(e) {
+  if (sortKey === 'otherMilestones') return otherMilestones(e).map(m => e[m.key]).sort().pop() || '';
+  return e[sortKey] ?? '';
+}
+
 function filteredEntries() {
   const fc = document.getElementById('filterCat').value;
   const ff = document.getElementById('filterFirm').value;
@@ -395,7 +406,7 @@ function filteredEntries() {
       (!fs || e.status === fs) &&
       (!from || e.pd >= from) &&
       (!to || e.pd <= to))
-    .sort((a, b) => String(a[sortKey] ?? '').localeCompare(String(b[sortKey] ?? '')) * sortDir);
+    .sort((a, b) => String(sortValue(a)).localeCompare(String(sortValue(b))) * sortDir);
 }
 
 function clearFilters() {
@@ -422,10 +433,11 @@ function renderTable() {
     <td style="white-space:nowrap">${esc(e.caseOpenDate)}</td>
     <td style="white-space:nowrap">${esc(e.caseFiledDate)}</td>
     <td style="white-space:nowrap">${esc(e.decisionDate)}</td>
+    <td class="ms-cell">${otherMilestones(e).map(m => `<div><span class="k">${esc(m.label)}:</span> ${esc(e[m.key])}</div>`).join('')}</td>
     <td style="color:var(--muted);white-space:nowrap">${esc(dateOnly(e.updatedAt)) || '—'}</td>
     <td class="notes-cell">${esc(e.notes)}</td>
     <td><button class="edit-btn" title="Edit this record" onclick="prefill('${esc(e.id)}')">✏️</button></td>
-  </tr>`).join('') || '<tr><td colspan="11" style="color:var(--muted)">No matching entries.</td></tr>';
+  </tr>`).join('') || '<tr><td colspan="12" style="color:var(--muted)">No matching entries.</td></tr>';
 
   // Mobile card view
   document.getElementById('cards').innerHTML = rows.map(e => `
@@ -441,9 +453,8 @@ function renderTable() {
         <div><div class="k">Category</div><span class="cat cat-${esc(e.category)}">${esc(e.category)}</span></div>
         <div><div class="k">Priority Date</div>${esc(e.pd)}</div>
         <div><div class="k">Law Firm</div>${esc(e.lawFirm) || '—'}</div>
-        <div><div class="k">Opened</div>${esc(e.caseOpenDate) || '—'}</div>
-        <div><div class="k">Filed</div>${esc(e.caseFiledDate) || '—'}</div>
-        <div><div class="k">Decision</div>${esc(e.decisionDate) || '—'}</div>
+        ${meta.milestones.filter(m => CORE_MILESTONES.includes(m.key) || e[m.key]).map(m =>
+          `<div><div class="k">${esc(m.label)}</div>${esc(e[m.key]) || '—'}</div>`).join('')}
         <div><div class="k">Last Updated</div>${esc(dateOnly(e.updatedAt)) || '—'}</div>
       </div>
       ${e.notes ? `<div class="ecard-notes">${esc(e.notes)}</div>` : ''}
@@ -497,7 +508,7 @@ document.getElementById('lookupForm').addEventListener('submit', async (e) => {
     const entry = await api('/api/entries/' + encodeURIComponent(id));
     const uf = document.getElementById('updateForm');
     uf.style.display = 'grid';
-    for (const k of ['id', 'category', 'pd', 'lawFirm', 'status', 'caseOpenDate', 'caseFiledDate', 'decisionDate', 'notes'])
+    for (const k of ['id', 'category', 'pd', 'lawFirm', 'status', 'notes', ...meta.milestones.map(m => m.key)])
       uf[k].value = entry[k] ?? '';
     rememberMe(entry.id);
     toast(`Loaded "${entry.id}" — edit below and save.`, 'info');
