@@ -105,8 +105,25 @@
   .cat-EB3 { background: #f0fdf4; color: #15803d; }
   .mono { font-family: ui-monospace, Menlo, monospace; font-size: 0.8rem; color: var(--text); font-weight: 600; }
   .notes-cell { color: var(--muted); min-width: 200px; max-width: 340px; }
-  .ms-cell { min-width: 170px; font-size: 0.78rem; line-height: 1.5; white-space: nowrap; }
-  .ms-cell .k { color: var(--muted); }
+  .latest-cell { min-width: 190px; }
+  .latest-summary { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
+  .latest-name { display: block; font-weight: 600; white-space: nowrap; }
+  .latest-date { display: block; color: var(--muted); font-size: 0.72rem; margin-top: 2px; white-space: nowrap; }
+  .timeline-toggle { background: #f8fafc; color: var(--accent); border: 1px solid #bfdbfe; border-radius: 6px; padding: 4px 7px; font-size: 0.72rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .timeline-toggle:hover, .timeline-toggle[aria-expanded="true"] { background: #eff6ff; border-color: #93c5fd; }
+  .timeline-detail-row td { padding: 0; }
+  .timeline-detail-row:hover td { background: transparent; }
+  .timeline-panel { background: #f8fafc; border-left: 3px solid var(--accent); padding: 16px 20px 18px; overflow-x: auto; }
+  .timeline-panel-title { color: var(--muted); font-size: 0.74rem; font-weight: 700; margin-bottom: 14px; }
+  .milestone-track { display: flex; align-items: flex-start; min-width: 760px; }
+  .track-item { flex: 0 0 92px; text-align: center; }
+  .track-dot { display: block; width: 12px; height: 12px; border: 2px solid #d1d5db; border-radius: 50%; background: #fff; margin: 0 auto 7px; }
+  .track-item.filled .track-dot { background: var(--green); border-color: var(--green); }
+  .track-item.event .track-dot { background: var(--red); border-color: var(--red); }
+  .track-label { display: block; font-size: 0.68rem; white-space: nowrap; }
+  .track-date { display: block; color: var(--muted); font-size: 0.66rem; margin-top: 3px; white-space: nowrap; }
+  .track-item.empty .track-label, .track-item.empty .track-date { color: #9ca3af; }
+  .track-connector { flex: 1; min-width: 8px; height: 2px; background: #dbe1e8; margin-top: 5px; }
   .table-wrap { overflow-x: auto; max-height: 65vh; overflow-y: auto; border-radius: 8px; }
   .result-count { color: var(--muted); font-size: 0.8rem; margin-bottom: 10px; }
 
@@ -118,6 +135,14 @@
   .ecard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: 0.82rem; }
   .ecard-grid .k { color: var(--muted); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; }
   .ecard-notes { margin-top: 8px; font-size: 0.82rem; color: var(--muted); }
+  .mobile-timeline { margin-top: 10px; border-top: 1px dashed var(--border); padding-top: 9px; }
+  .mobile-timeline summary { color: var(--accent); cursor: pointer; font-size: 0.78rem; font-weight: 600; }
+  .mobile-timeline .milestone-track { display: block; min-width: 0; margin-top: 11px; }
+  .mobile-timeline .track-item { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 6px; min-height: 30px; text-align: left; }
+  .mobile-timeline .track-dot { width: 10px; height: 10px; margin: 2px 0 0; }
+  .mobile-timeline .track-label { font-size: 0.76rem; }
+  .mobile-timeline .track-date { font-size: 0.72rem; margin-top: 0; }
+  .mobile-timeline .track-connector { display: block; flex: none; width: 2px; height: 14px; min-width: 0; margin: 0 0 0 5px; }
 
   @media (max-width: 720px) {
     body { padding: 20px 12px; }
@@ -220,16 +245,12 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script>
 let entries = [], meta = { categories: [], statuses: [], lawFirms: [], milestones: [] };
-let sortKey = 'updatedAt', sortDir = -1, flashId = null;
+let sortKey = 'updatedAt', sortDir = -1, flashId = null, expandedTimelineId = null;
 const COLS = [
   ['id', 'ID'], ['category', 'Cat'], ['pd', 'Priority Date'], ['lawFirm', 'Law Firm'],
-  ['status', 'Status'], ['caseOpenDate', 'Opened'], ['caseFiledDate', 'Filed'],
-  ['decisionDate', 'Decision'], ['otherMilestones', 'Other Milestones'],
+  ['status', 'Status'], ['latestMilestone', 'Latest Milestone'],
   ['updatedAt', 'Last Updated'], ['notes', 'Notes'],
 ];
-// Milestones with their own table column; the rest are listed in "Other Milestones".
-const CORE_MILESTONES = ['caseOpenDate', 'caseFiledDate', 'decisionDate'];
-const otherMilestones = (e) => meta.milestones.filter(m => !CORE_MILESTONES.includes(m.key) && e[m.key]);
 const MY_ID_KEY = '***';
 const STATUS_COLORS = {
   'Case Not Opened': '#9ca3af', 'Case Opened': '#2563eb', 'Case Filed': '#d97706',
@@ -243,6 +264,24 @@ const badgeClass = (s) => ({
 }[s] || 'b-not');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dateOnly = (s) => (s || '').slice(0, 10);
+
+// Latest = most recent filled date; metadata order breaks same-day ties.
+function latestMilestone(e) {
+  let latest = null;
+  for (const m of meta.milestones) {
+    const date = dateOnly(e[m.key]);
+    if (date && (!latest || date >= latest.date)) latest = { ...m, date };
+  }
+  return latest;
+}
+
+function timelineTrackHtml(e) {
+  return `<div class="milestone-track">${meta.milestones.map((m, i) => {
+    const date = dateOnly(e[m.key]);
+    const state = date ? (m.key === 'rfeDate' ? 'event' : 'filled') : 'empty';
+    return `<div class="track-item ${state}"><span class="track-dot"></span><span class="track-label">${esc(m.label)}</span><span class="track-date">${esc(date) || '—'}</span></div>${i < meta.milestones.length - 1 ? '<span class="track-connector"></span>' : ''}`;
+  }).join('')}</div>`;
+}
 
 function toast(text, cls = 'info', ms = 4000) {
   const el = document.createElement('div');
@@ -389,7 +428,7 @@ function renderPdChart(rows) {
 }
 
 function sortValue(e) {
-  if (sortKey === 'otherMilestones') return otherMilestones(e).map(m => e[m.key]).sort().pop() || '';
+  if (sortKey === 'latestMilestone') return latestMilestone(e)?.date || '';
   return e[sortKey] ?? '';
 }
 
@@ -424,24 +463,35 @@ function renderTable() {
   document.getElementById('headRow').innerHTML = COLS.map(([k, label]) =>
     `<th onclick="sortBy('${k}')">${label}${sortKey === k ? (sortDir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('') + '<th style="cursor:default"></th>';
 
-  document.getElementById('tbody').innerHTML = rows.map(e => `<tr${e.id === flashId ? ' class="flash"' : ''}>
-    <td><span class="mono">${esc(e.displayId || e.id)}</span></td>
-    <td><span class="cat cat-${esc(e.category)}">${esc(e.category)}</span></td>
-    <td style="white-space:nowrap">${esc(e.pd)}</td>
-    <td>${esc(e.lawFirm)}</td>
-    <td><span class="badge ${badgeClass(e.status)}">${esc(e.status)}</span></td>
-    <td style="white-space:nowrap">${esc(e.caseOpenDate)}</td>
-    <td style="white-space:nowrap">${esc(e.caseFiledDate)}</td>
-    <td style="white-space:nowrap">${esc(e.decisionDate)}</td>
-    <td class="ms-cell">${otherMilestones(e).map(m => `<div><span class="k">${esc(m.label)}:</span> ${esc(e[m.key])}</div>`).join('')}</td>
-    <td style="color:var(--muted);white-space:nowrap">${esc(dateOnly(e.updatedAt)) || '—'}</td>
-    <td class="notes-cell">${esc(e.notes)}</td>
-    <td><button class="edit-btn" title="Edit this record" onclick="prefill('${esc(e.id)}')">✏️</button></td>
-  </tr>`).join('') || '<tr><td colspan="12" style="color:var(--muted)">No matching entries.</td></tr>';
+  document.getElementById('tbody').innerHTML = rows.map(e => {
+    const latest = latestMilestone(e);
+    const open = expandedTimelineId === e.id;
+    const latestHtml = latest
+      ? `<div class="latest-summary"><div><span class="latest-name">${esc(latest.label)}</span><span class="latest-date">${esc(latest.date)}</span></div><button type="button" class="timeline-toggle" aria-expanded="${open}" aria-controls="timeline-${esc(e.id)}" aria-label="${open ? 'Hide' : 'Show'} timeline for ${esc(e.displayId || e.id)}" onclick="toggleTimeline('${esc(e.id)}')">Timeline ${open ? '▾' : '▸'}</button></div>`
+      : '<span style="color:var(--muted)">—</span>';
+    return `<tr${e.id === flashId ? ' class="flash"' : ''}>
+      <td><span class="mono">${esc(e.displayId || e.id)}</span></td>
+      <td><span class="cat cat-${esc(e.category)}">${esc(e.category)}</span></td>
+      <td style="white-space:nowrap">${esc(e.pd)}</td>
+      <td>${esc(e.lawFirm)}</td>
+      <td><span class="badge ${badgeClass(e.status)}">${esc(e.status)}</span></td>
+      <td class="latest-cell">${latestHtml}</td>
+      <td style="color:var(--muted);white-space:nowrap">${esc(dateOnly(e.updatedAt)) || '—'}</td>
+      <td class="notes-cell">${esc(e.notes)}</td>
+      <td><button class="edit-btn" title="Edit this record" onclick="prefill('${esc(e.id)}')">✏️</button></td>
+    </tr>${open ? `<tr class="timeline-detail-row"><td colspan="9"><div class="timeline-panel" id="timeline-${esc(e.id)}"><div class="timeline-panel-title">I-485 Timeline · ${esc(e.displayId || e.id)}</div>${timelineTrackHtml(e)}</div></td></tr>` : ''}`;
+  }).join('') || '<tr><td colspan="9" style="color:var(--muted)">No matching entries.</td></tr>';
 
   // Mobile card view
-  document.getElementById('cards').innerHTML = rows.map(e => `
-    <div class="ecard${e.id === flashId ? ' flash' : ''}">
+  document.getElementById('cards').innerHTML = rows.map(e => {
+    const latest = latestMilestone(e);
+    const mobileLatest = latest
+      ? `<strong>${esc(latest.label)}</strong><span class="latest-date">${esc(latest.date)}</span>`
+      : '—';
+    const mobileTimeline = latest
+      ? `<details class="mobile-timeline"><summary>Timeline</summary>${timelineTrackHtml(e)}</details>`
+      : '';
+    return `<div class="ecard${e.id === flashId ? ' flash' : ''}">
       <div class="ecard-top">
         <span class="mono">${esc(e.displayId || e.id)}</span>
         <span style="display:flex;gap:8px;align-items:center">
@@ -453,14 +503,20 @@ function renderTable() {
         <div><div class="k">Category</div><span class="cat cat-${esc(e.category)}">${esc(e.category)}</span></div>
         <div><div class="k">Priority Date</div>${esc(e.pd)}</div>
         <div><div class="k">Law Firm</div>${esc(e.lawFirm) || '—'}</div>
-        ${meta.milestones.filter(m => CORE_MILESTONES.includes(m.key) || e[m.key]).map(m =>
-          `<div><div class="k">${esc(m.label)}</div>${esc(e[m.key]) || '—'}</div>`).join('')}
+        <div><div class="k">Latest Milestone</div>${mobileLatest}</div>
         <div><div class="k">Last Updated</div>${esc(dateOnly(e.updatedAt)) || '—'}</div>
       </div>
+      ${mobileTimeline}
       ${e.notes ? `<div class="ecard-notes">${esc(e.notes)}</div>` : ''}
-    </div>`).join('') || '<div style="color:var(--muted)">No matching entries.</div>';
+    </div>`;
+  }).join('') || '<div style="color:var(--muted)">No matching entries.</div>';
 
   flashId = null;
+}
+
+function toggleTimeline(id) {
+  expandedTimelineId = expandedTimelineId === id ? null : id;
+  renderTable();
 }
 
 function sortBy(k) {
