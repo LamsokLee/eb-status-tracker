@@ -45,8 +45,6 @@
   .pace-connector { flex: 1 1 120px; min-width: 110px; max-width: 180px; display: flex; flex-direction: column; align-items: center; }
   .pace-days { height: 22px; display: flex; align-items: center; white-space: nowrap; background: #eff6ff; color: var(--accent2); border: 1px solid #bfdbfe; border-radius: 999px; padding: 2px 9px; font-size: 0.72rem; font-weight: 700; margin-bottom: 7px; }
   .pace-line { width: calc(100% + 112px); height: 2px; background: #bfdbfe; }
-  .pace-sample { color: var(--muted); font-size: 0.66rem; white-space: nowrap; margin-top: 7px; }
-  .pace-foot { color: var(--muted); font-size: 0.72rem; margin-top: 10px; }
   .viz-title { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 12px; font-weight: 700; }
   .viz-note { text-transform: none; letter-spacing: 0; font-weight: 400; opacity: .8; }
   .chart-scroll { overflow-x: auto; }
@@ -174,8 +172,6 @@
     .pace-connector { display: grid; grid-template-columns: 16px minmax(0, 1fr); column-gap: 8px; row-gap: 2px; align-items: center; width: auto; min-width: 0; max-width: none; margin: 3px 0; }
     .pace-line { grid-row: 1 / span 2; width: 2px; height: 100%; min-height: 18px; justify-self: center; }
     .pace-days { grid-column: 2; grid-row: 1; height: auto; justify-self: start; margin: 0; }
-    .pace-sample { grid-column: 2; grid-row: 2; margin: 0; }
-    .pace-foot { margin-left: 24px; }
     .table-wrap { display: none; }
     .cards { display: block; }
     button.submit { width: 100%; }
@@ -201,10 +197,9 @@
 
   <section class="card pace-card" id="paceCard" aria-labelledby="paceTitle" hidden>
     <div class="pace-head">
-      <h3 class="viz-title" id="paceTitle">Milestone pace <span class="viz-note">(median days between completed milestones &middot; transitions with &ge;5 completed pairs)</span></h3>
+      <h3 class="viz-title" id="paceTitle">Milestone pace <span class="viz-note">(median days)</span></h3>
     </div>
     <div class="pace-scroll"><div class="pace-track" id="paceTrack"></div></div>
-    <div class="pace-foot" id="paceFoot"></div>
   </section>
 
   <div class="card">
@@ -329,7 +324,6 @@ function formatDayCount(value) {
 function renderMilestonePace() {
   const card = document.getElementById('paceCard');
   const track = document.getElementById('paceTrack');
-  const footEl = document.getElementById('paceFoot');
   const labels = new Map(meta.milestones.map((m) => [m.key, m.label]));
   const stageStats = [];
 
@@ -345,7 +339,6 @@ function renderMilestonePace() {
   if (!stageStats.length) {
     card.hidden = true;
     track.innerHTML = '';
-    footEl.innerHTML = '';
     return;
   }
 
@@ -354,22 +347,10 @@ function renderMilestonePace() {
   for (const stage of stageStats) {
     const fromLabel = labels.get(stage.fromKey) || stage.fromKey;
     const toLabel = labels.get(stage.toKey) || stage.toKey;
-    html += `<div class="pace-connector" aria-label="Median ${formatDayCount(stage.median)} from ${esc(fromLabel)} to ${esc(toLabel)}, ${stage.n} completed pairs"><span class="pace-days">${formatDayCount(stage.median)}</span><span class="pace-line" aria-hidden="true"></span><span class="pace-sample">n=${stage.n}</span></div>`;
+    html += `<div class="pace-connector" aria-label="Median ${formatDayCount(stage.median)} from ${esc(fromLabel)} to ${esc(toLabel)}"><span class="pace-days">${formatDayCount(stage.median)}</span><span class="pace-line" aria-hidden="true"></span></div>`;
     html += nodeHtml(stage.toKey);
   }
-
-  const next = PACE_STAGES[stageStats.length];
-  let foot = '';
-  if (next) {
-    const nextN = entries.map((entry) => intervalDays(entry, next[0], next[1]))
-      .filter((value) => value !== null && value >= 0).length;
-    if (nextN > 0) {
-      foot = `<div class="pace-foot">Collecting more data for ${esc(labels.get(next[0]) || next[0])} &rarr; ${esc(labels.get(next[1]) || next[1])} (${nextN} completed pair${nextN === 1 ? '' : 's'}).</div>`;
-    }
-  }
-
   track.innerHTML = html;
-  footEl.innerHTML = foot;
   card.hidden = false;
 }
 
