@@ -34,6 +34,19 @@
   .stats { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
   .stat { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; font-size: 0.82rem; color: var(--muted); }
   .stat b { font-size: 1.15rem; display: block; color: var(--text); }
+  .pace-card { padding: 16px 18px 14px; }
+  .pace-head { margin-bottom: 6px; }
+  .pace-head .viz-title { margin-bottom: 0; }
+  .pace-scroll { overflow-x: auto; }
+  .pace-track { display: flex; align-items: flex-start; min-width: 560px; padding: 2px 0; }
+  .pace-node { flex: 0 0 112px; display: flex; flex-direction: column; align-items: center; padding-top: 24px; text-align: center; }
+  .pace-dot { width: 11px; height: 11px; border: 2px solid var(--green); border-radius: 50%; background: var(--green); margin-bottom: 8px; }
+  .pace-label { font-size: 0.74rem; font-weight: 600; line-height: 1.3; }
+  .pace-connector { flex: 1 1 120px; min-width: 110px; max-width: 180px; display: flex; flex-direction: column; align-items: center; }
+  .pace-days { height: 22px; display: flex; align-items: center; white-space: nowrap; background: #eff6ff; color: var(--accent2); border: 1px solid #bfdbfe; border-radius: 999px; padding: 2px 9px; font-size: 0.72rem; font-weight: 700; margin-bottom: 7px; }
+  .pace-line { width: calc(100% + 112px); height: 2px; background: #bfdbfe; }
+  .pace-sample { color: var(--muted); font-size: 0.66rem; white-space: nowrap; margin-top: 7px; }
+  .pace-foot { color: var(--muted); font-size: 0.72rem; margin-top: 10px; }
   .viz-title { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 12px; font-weight: 700; }
   .viz-note { text-transform: none; letter-spacing: 0; font-weight: 400; opacity: .8; }
   .chart-scroll { overflow-x: auto; }
@@ -153,6 +166,16 @@
     form { grid-template-columns: 1fr 1fr; gap: 10px; }
     .stats { gap: 8px; }
     .stat { padding: 8px 12px; font-size: 0.76rem; }
+    .pace-scroll { overflow: visible; }
+    .pace-track { display: block; min-width: 0; }
+    .pace-node { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; width: auto; padding-top: 0; text-align: left; }
+    .pace-dot { margin: 3px 0 0; }
+    .pace-label { font-size: 0.78rem; }
+    .pace-connector { display: grid; grid-template-columns: 16px minmax(0, 1fr); column-gap: 8px; row-gap: 2px; align-items: center; width: auto; min-width: 0; max-width: none; margin: 3px 0; }
+    .pace-line { grid-row: 1 / span 2; width: 2px; height: 100%; min-height: 18px; justify-self: center; }
+    .pace-days { grid-column: 2; grid-row: 1; height: auto; justify-self: start; margin: 0; }
+    .pace-sample { grid-column: 2; grid-row: 2; margin: 0; }
+    .pace-foot { margin-left: 24px; }
     .table-wrap { display: none; }
     .cards { display: block; }
     button.submit { width: 100%; }
@@ -175,6 +198,14 @@
   </div>
 
   <div class="stats" id="stats"></div>
+
+  <section class="card pace-card" id="paceCard" aria-labelledby="paceTitle" hidden>
+    <div class="pace-head">
+      <h3 class="viz-title" id="paceTitle">Milestone pace <span class="viz-note">(median days between completed milestones &middot; transitions with &ge;5 completed pairs)</span></h3>
+    </div>
+    <div class="pace-scroll"><div class="pace-track" id="paceTrack"></div></div>
+    <div class="pace-foot" id="paceFoot"></div>
+  </section>
 
   <div class="card">
     <div class="filters-grid">
@@ -258,12 +289,89 @@ const STATUS_COLORS = {
 };
 const CAT_COLORS = { EB1: '#7c3aed', EB2: '#2563eb', EB3: '#16a34a' };
 
+// Linear I-485 spine only: EAD/AP are parallel benefits and RFE is an event,
+// so putting them in one elapsed-time chain would imply a false sequence.
+const PACE_STAGES = [
+  ['caseOpenDate', 'caseFiledDate'],
+  ['caseFiledDate', 'receiptDate'],
+  ['receiptDate', 'biometricsDate'],
+  ['biometricsDate', 'decisionDate'],
+];
+const PACE_MIN_SAMPLE = 5;
+const MS_PER_DAY = 86400000;
+
 const badgeClass = (s) => ({
   'Case Not Opened': 'b-not', 'Case Opened': 'b-open', 'Case Filed': 'b-filed',
   'RFE': 'b-rfe', 'Approved': 'b-approved', 'Denied': 'b-denied',
 }[s] || 'b-not');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dateOnly = (s) => (s || '').slice(0, 10);
+
+function intervalDays(entry, fromKey, toKey) {
+  const from = dateOnly(entry[fromKey]);
+  const to = dateOnly(entry[toKey]);
+  if (!from || !to) return null;
+  const diff = Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`);
+  return Number.isFinite(diff) ? Math.round(diff / MS_PER_DAY) : null;
+}
+
+function median(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function formatDayCount(value) {
+  const rounded = Number.isInteger(value) ? value : value.toFixed(1);
+  return `${rounded} ${value === 1 ? 'day' : 'days'}`;
+}
+
+function renderMilestonePace() {
+  const card = document.getElementById('paceCard');
+  const track = document.getElementById('paceTrack');
+  const footEl = document.getElementById('paceFoot');
+  const labels = new Map(meta.milestones.map((m) => [m.key, m.label]));
+  const stageStats = [];
+
+  // Stop at the first under-sampled transition so the visible chain is contiguous.
+  for (const [fromKey, toKey] of PACE_STAGES) {
+    const values = entries
+      .map((entry) => intervalDays(entry, fromKey, toKey))
+      .filter((value) => value !== null && value >= 0);
+    if (values.length < PACE_MIN_SAMPLE) break;
+    stageStats.push({ fromKey, toKey, n: values.length, median: median(values) });
+  }
+
+  if (!stageStats.length) {
+    card.hidden = true;
+    track.innerHTML = '';
+    footEl.innerHTML = '';
+    return;
+  }
+
+  const nodeHtml = (key) => `<div class="pace-node"><span class="pace-dot" aria-hidden="true"></span><span class="pace-label">${esc(labels.get(key) || key)}</span></div>`;
+  let html = nodeHtml(stageStats[0].fromKey);
+  for (const stage of stageStats) {
+    const fromLabel = labels.get(stage.fromKey) || stage.fromKey;
+    const toLabel = labels.get(stage.toKey) || stage.toKey;
+    html += `<div class="pace-connector" aria-label="Median ${formatDayCount(stage.median)} from ${esc(fromLabel)} to ${esc(toLabel)}, ${stage.n} completed pairs"><span class="pace-days">${formatDayCount(stage.median)}</span><span class="pace-line" aria-hidden="true"></span><span class="pace-sample">n=${stage.n}</span></div>`;
+    html += nodeHtml(stage.toKey);
+  }
+
+  const next = PACE_STAGES[stageStats.length];
+  let foot = '';
+  if (next) {
+    const nextN = entries.map((entry) => intervalDays(entry, next[0], next[1]))
+      .filter((value) => value !== null && value >= 0).length;
+    if (nextN > 0) {
+      foot = `<div class="pace-foot">Collecting more data for ${esc(labels.get(next[0]) || next[0])} &rarr; ${esc(labels.get(next[1]) || next[1])} (${nextN} completed pair${nextN === 1 ? '' : 's'}).</div>`;
+    }
+  }
+
+  track.innerHTML = html;
+  footEl.innerHTML = foot;
+  card.hidden = false;
+}
 
 // Latest = most recent filled date; metadata order breaks same-day ties.
 function latestMilestone(e) {
@@ -362,6 +470,7 @@ async function load() {
   document.getElementById('filterFirm').innerHTML =
     '<option value="">All</option>' + meta.lawFirms.map(f => `<option>${f}</option>`).join('');
   loadStats();
+  renderMilestonePace();
   renderWelcome();
   renderTable();
 }
